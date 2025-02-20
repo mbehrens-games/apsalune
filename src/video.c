@@ -77,7 +77,7 @@ short int video_init()
 
   /* create the framebuffer texture */
   G_video_sdl_frame_texture = SDL_CreateTexture(G_video_sdl_renderer,
-                                                SDL_PIXELFORMAT_RGB555,
+                                                SDL_PIXELFORMAT_RGB444,
                                                 SDL_TEXTUREACCESS_STREAMING,
                                                 DRAWING_FRAME_WIDTH, 
                                                 DRAWING_FRAME_HEIGHT);

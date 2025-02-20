@@ -9,21 +9,21 @@
 #include "layout.h"
 
 layout_element  G_layout_gui_elements[LAYOUT_GUI_ELEMENTS_ARRAY_SIZE];
-short int       G_layout_gui_element_count;
+short           G_layout_gui_element_count;
 
-layout_range    G_layout_gui_screen_ranges[LAYOUT_NUM_GUI_SCREENS];
+short G_layout_gui_lists[LAYOUT_GUI_LISTS_ARRAY_SIZE];
+short G_layout_gui_list_count;
 
-char      G_layout_gui_names[LAYOUT_GUI_NAMES_ARRAY_SIZE];
-short int G_layout_gui_name_count;
+char  G_layout_gui_strings[LAYOUT_GUI_STRINGS_ARRAY_SIZE];
+short G_layout_gui_string_count;
 
-char      G_layout_gui_values[LAYOUT_GUI_VALUES_ARRAY_SIZE];
-short int G_layout_gui_value_count;
+short G_layout_gui_screen_indices[LAYOUT_NUM_GUI_SCREENS];
 
 /*******************************************************************************
 ** layout_add_gui_panel()
 *******************************************************************************/
-short int layout_add_gui_panel( short int corner_x, short int corner_y, 
-                                short int width, short int height)
+short int layout_add_gui_panel( short corner_x, short corner_y, 
+                                short width, short height)
 {
   layout_element* e;
 
@@ -31,55 +31,137 @@ short int layout_add_gui_panel( short int corner_x, short int corner_y,
   if (G_layout_gui_element_count >= LAYOUT_GUI_ELEMENTS_ARRAY_SIZE)
     return 1;
 
-  /* add the panel! */
+  if (G_layout_gui_list_count >= LAYOUT_GUI_LISTS_ARRAY_SIZE)
+    return 1;
+
+  /* add panel to the element array */
   e = &G_layout_gui_elements[G_layout_gui_element_count];
 
   e->type = LAYOUT_GUI_ELEMENT_TYPE_PANEL;
 
   e->x = corner_x;
   e->y = corner_y;
-  e->w = width;
-  e->h = height;
 
-  e->index = 0;
+  e->ex_1 = width;
+  e->ex_2 = height;
 
-  G_layout_gui_element_count += 1;  
+  /* add panel to the current list */
+  G_layout_gui_lists[G_layout_gui_list_count] = G_layout_gui_element_count;
+
+  G_layout_gui_list_count += 1;
+  G_layout_gui_element_count += 1;
 
   return 0;
 }
 
 /*******************************************************************************
-** layout_add_gui_name()
+** layout_add_gui_fixed_text()
 *******************************************************************************/
-short int layout_add_gui_name(short int corner_x, short int corner_y, 
-                              char* str)
+short int layout_add_gui_fixed_text(short center_x, short center_y, 
+                                    char* str)
 {
+  int m;
+
   layout_element* e;
+
+  short length;
 
   /* make sure there is space for this element */
   if (G_layout_gui_element_count >= LAYOUT_GUI_ELEMENTS_ARRAY_SIZE)
     return 1;
 
-  if (G_layout_gui_name_count >= LAYOUT_GUI_NAMES_ARRAY_SIZE)
+  if (G_layout_gui_list_count >= LAYOUT_GUI_LISTS_ARRAY_SIZE)
     return 1;
 
-  /* add the name! */
+  /* compute length of text */
+  length = 0;
+
+  while ((length < 64) && (str[length] != '\0'))
+    length += 1;
+
+  /* make sure there is space for this string */
+  if (G_layout_gui_string_count + length + 1 >= LAYOUT_GUI_STRINGS_ARRAY_SIZE)
+    return 1;
+
+  /* add text to the strings array */
+  G_layout_gui_strings[G_layout_gui_string_count + 0] = length;
+
+  for (m = 0; m < length; m++)
+    G_layout_gui_strings[G_layout_gui_string_count + 1 + m] = str[m];
+
+  /* add text to the element array */
   e = &G_layout_gui_elements[G_layout_gui_element_count];
 
-  e->type = LAYOUT_GUI_ELEMENT_TYPE_NAME;
+  e->type = LAYOUT_GUI_ELEMENT_TYPE_FIXED_TEXT;
 
-  e->x = corner_x;
-  e->y = corner_y;
-  e->w = LAYOUT_GUI_NAME_LENGTH;
-  e->h = 1;
+  e->x = center_x;
+  e->y = center_y;
 
-  e->index = G_layout_gui_name_count;
+  e->ex_1 = G_layout_gui_string_count;
+  e->ex_2 = 0;
 
-  strncpy(&G_layout_gui_names[G_layout_gui_name_count * LAYOUT_GUI_NAME_LENGTH], 
-          str, LAYOUT_GUI_NAME_LENGTH);
+  /* add text to the current list */
+  G_layout_gui_lists[G_layout_gui_list_count] = G_layout_gui_element_count;
 
+  G_layout_gui_list_count += 1;
   G_layout_gui_element_count += 1;
-  G_layout_gui_name_count += 1;
+  G_layout_gui_string_count += 1 + length;
+
+  return 0;
+}
+
+/*******************************************************************************
+** layout_generate_instrument_edit_screen()
+*******************************************************************************/
+short int layout_generate_instrument_edit_screen()
+{
+  int m;
+
+  short column_x;
+  short column_y;
+
+  short list_size_index;
+
+  /* initialize new list */
+  list_size_index = G_layout_gui_list_count;
+  G_layout_gui_list_count += 1;
+
+  G_layout_gui_screen_indices[LAYOUT_GUI_SCREEN_INSTRUMENT_EDIT] = list_size_index;
+
+  /* initialize cooridnates */
+  column_x = 12 * 8 + 0;
+  column_y =  2 * 8 + 4;
+
+  /* make the screen layout */
+  layout_add_gui_fixed_text(column_x, column_y, "Loop");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "Mode");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "Fade");
+  column_y += 16;
+
+  layout_add_gui_fixed_text(column_x, column_y, "Keyscale");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "LScal");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "LCurv");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "RScal");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "RCurv");
+  column_y += 12;
+
+  layout_add_gui_fixed_text(column_x, column_y, "Break");
+  column_y += 12;
+
+  /* update list size */
+  G_layout_gui_lists[list_size_index] = G_layout_gui_list_count - (list_size_index + 1);
 
   return 0;
 }
@@ -92,7 +174,6 @@ short int layout_generate_tables()
   int m;
 
   layout_element* e;
-  layout_range* r;
 
   /* reset element array */
   for (m = 0; m < LAYOUT_GUI_ELEMENTS_ARRAY_SIZE; m++)
@@ -103,45 +184,31 @@ short int layout_generate_tables()
 
     e->x = 0;
     e->y = 0;
-    e->w = 0;
-    e->h = 0;
 
-    e->index = 0;
+    e->ex_1 = 0;
+    e->ex_2 = 0;
   }
 
   G_layout_gui_element_count = 0;
 
-  /* reset screen ranges */
+  /* reset list array */
+  for (m = 0; m < LAYOUT_GUI_LISTS_ARRAY_SIZE; m++)
+    G_layout_gui_lists[m] = 0;
+
+  G_layout_gui_list_count = 0;
+
+  /* reset string array */
+  for (m = 0; m < LAYOUT_GUI_STRINGS_ARRAY_SIZE; m++)
+    G_layout_gui_strings[m] = '\0';
+
+  G_layout_gui_string_count = 0;
+
+  /* reset screen index array */
   for (m = 0; m < LAYOUT_NUM_GUI_SCREENS; m++)
-  {
-    r = &G_layout_gui_screen_ranges[m];
+    G_layout_gui_screen_indices[m] = 0;
 
-    r->start_index = 0;
-    r->end_index = 0;
-  }
-
-  /* reset text arrays */
-  for (m = 0; m < LAYOUT_GUI_NAMES_ARRAY_SIZE; m++)
-    G_layout_gui_names[m] = '\0';
-
-  G_layout_gui_name_count = 0;
-
-  for (m = 0; m < LAYOUT_GUI_VALUES_ARRAY_SIZE; m++)
-    G_layout_gui_values[m] = '\0';
-
-  G_layout_gui_value_count = 0;
-
-  /* instrument screen */
-  r = &G_layout_gui_screen_ranges[LAYOUT_GUI_SCREEN_INSTRUMENT];
-
-  r->start_index = G_layout_gui_element_count;
-
-  layout_add_gui_name(64, 16, "Amp");
-  layout_add_gui_name(64, 32, "Mul");
-
-  layout_add_gui_panel(304, 16, 8, 12);
-
-  r->end_index = G_layout_gui_element_count;
+  /* generate screen layouts */
+  layout_generate_instrument_edit_screen();
 
   return 0;
 }

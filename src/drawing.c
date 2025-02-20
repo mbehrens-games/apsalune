@@ -15,9 +15,6 @@ unsigned char  G_drawing_gui_cells[DRAWING_GUI_CELLS_ARRAY_SIZE];
 
 unsigned short G_drawing_frame_pixels[DRAWING_FRAME_PIXELS_ARRAY_SIZE];
 
-static draw_cmd S_drawing_draw_cmds[DRAWING_DRAW_CMD_ARRAY_SIZE];
-static short    S_drawing_draw_cmd_count;
-
 static short S_drawing_theme_text_pal[7] = {2, 3, 4, 5, 6, 7, 8};
 static short S_drawing_theme_bg_pal[7] = {9, 10, 11, 12, 13, 14, 15};
 
@@ -27,8 +24,6 @@ static short S_drawing_theme_bg_pal[7] = {9, 10, 11, 12, 13, 14, 15};
 short int drawing_reset_all()
 {
   int m;
-
-  draw_cmd* dc;
 
   G_drawing_gui_theme = 0;
 
@@ -40,23 +35,6 @@ short int drawing_reset_all()
 
   for (m = 0; m < DRAWING_FRAME_PIXELS_ARRAY_SIZE; m++)
     G_drawing_frame_pixels[m] = 0;
-
-  for (m = 0; m < DRAWING_DRAW_CMD_ARRAY_SIZE; m++)
-  {
-    dc = &S_drawing_draw_cmds[m];
-
-    dc->type = DRAW_CMD_TYPE_SPRITE;
-
-    dc->pal = 0;
-    dc->cell = 0;
-
-    dc->x = 0;
-    dc->y = 0;
-    dc->w = 1;
-    dc->h = 1;
-  }
-
-  S_drawing_draw_cmd_count = 0;
 
   return 0;
 }
@@ -74,11 +52,14 @@ short int drawing_draw_screen(short int screen)
   int j;
 
   layout_element* e;
-  layout_range* r;
 
-  draw_cmd* dc;
+  short elem_index;
 
-  char ascii_ch;
+  short list_start;
+  short list_size;
+
+  short string_size;
+  char  string_ch;
 
   short pal_offset;
 
@@ -94,100 +75,29 @@ short int drawing_draw_screen(short int screen)
   if ((screen < 0) || (screen >= LAYOUT_NUM_GUI_SCREENS))
     return 1;
 
-  /* reset draw commands */
-  for (m = 0; m < S_drawing_draw_cmd_count; m++)
+  /* set list based on screen */
+  list_start = G_layout_gui_screen_indices[screen];
+  list_size = G_layout_gui_lists[list_start];
+
+  /* draw each element! */
+  for (k = 0; k < list_size; k++)
   {
-    dc = &S_drawing_draw_cmds[m];
+    elem_index = G_layout_gui_lists[list_start + 1 + k];
 
-    dc->type = DRAW_CMD_TYPE_SPRITE;
+    e = &G_layout_gui_elements[elem_index];
 
-    dc->pal = 0;
-    dc->cell = 0;
-
-    dc->x = 0;
-    dc->y = 0;
-    dc->w = 1;
-    dc->h = 1;
-  }
-
-  S_drawing_draw_cmd_count = 0;
-
-  /* set elements to iterate over based on screen */
-  r = &G_layout_gui_screen_ranges[screen];
-
-  /* generate draw commands for each element */
-  S_drawing_draw_cmd_count = 0;
-
-  for (m = r->start_index; m < r->end_index; m++)
-  {
-    e = &G_layout_gui_elements[m];
-
+    /* panels */
     if (e->type == LAYOUT_GUI_ELEMENT_TYPE_PANEL)
     {
-      dc = &S_drawing_draw_cmds[S_drawing_draw_cmd_count];
-
-      dc->type = DRAW_CMD_TYPE_PANEL;
-
-      dc->pal = S_drawing_theme_text_pal[G_drawing_gui_theme];
-      dc->cell = 96;
-
-      dc->x = e->x;
-      dc->y = e->y;
-
-      dc->w = e->w;
-      dc->h = e->h;
-
-      S_drawing_draw_cmd_count += 1;
-    }
-    else if (e->type == LAYOUT_GUI_ELEMENT_TYPE_NAME)
-    {
-      for (n = 0; n < LAYOUT_GUI_NAME_LENGTH; n++)
-      {
-        ascii_ch = G_layout_gui_names[e->index * LAYOUT_GUI_NAME_LENGTH + n];
-
-        if (ascii_ch == '\0')
-          break;
-        else
-        {
-          dc = &S_drawing_draw_cmds[S_drawing_draw_cmd_count];
-
-          dc->type = DRAW_CMD_TYPE_SPRITE;
-
-          dc->pal = S_drawing_theme_text_pal[G_drawing_gui_theme];
-
-          if (ascii_ch < 32)
-            dc->cell = 0;
-          else
-            dc->cell = ascii_ch - 32;
-
-          dc->x = e->x + 8 * n;
-          dc->y = e->y;
-
-          dc->w = 1;
-          dc->h = 1;
-
-          S_drawing_draw_cmd_count += 1;
-        }
-      }
-    }
-  }
-
-  /* process all draw commands */
-  for (k = 0; k < S_drawing_draw_cmd_count; k++)
-  {
-    dc = &S_drawing_draw_cmds[k];
-
-    /* flood fill with panel background color if necessary */
-    if (dc->type == DRAW_CMD_TYPE_PANEL)
-    {
+      /* flood fill with panel background color */
       pal_offset = S_drawing_theme_bg_pal[G_drawing_gui_theme] * DRAWING_GUI_NUM_COLORS;
 
-      for (i = 0; i < 8 * dc->w; i++)
+      for (i = 0; i < 8 * e->ex_1; i++)
       {
-        for (j = 0; j < 8 * dc->h; j++)
+        for (j = 0; j < 8 * e->ex_2; j++)
         {
-          screen_x = dc->x + i;
-          screen_y = dc->y + j;
+          screen_x = e->x + i;
+          screen_y = e->y + j;
 
           if ((screen_x < 0) || (screen_x >= DRAWING_FRAME_WIDTH))
             continue;
@@ -199,47 +109,89 @@ short int drawing_draw_screen(short int screen)
             G_drawing_gui_pals[pal_offset + 2];
         }
       }
-    }
 
-    /* draw cells associated with this draw command */
-    pal_offset = (dc->pal & DRAWING_GUI_PALS_MASK) * DRAWING_GUI_NUM_COLORS;
+      /* draw cells for the panel border */
+      pal_offset = (S_drawing_theme_text_pal[G_drawing_gui_theme] & DRAWING_GUI_PALS_MASK) * DRAWING_GUI_NUM_COLORS;
 
-    for (m = 0; m < dc->w; m++)
-    {
-      for (n = 0; n < dc->h; n++)
+      for (m = 0; m < e->ex_1; m++)
       {
-        if (dc->type == DRAW_CMD_TYPE_PANEL)
+        for (n = 0; n < e->ex_2; n++)
         {
-          cell_index = dc->cell;
+          /* determine the cell offset */
+          cell_index = 96;
 
           if (n == 0)
             cell_index += 0 * 3;
-          else if (n == dc->h - 1)
+          else if (n == e->ex_2 - 1)
             cell_index += 2 * 3;
           else
             cell_index += 1 * 3;
 
           if (m == 0)
             cell_index += 0;
-          else if (m == dc->w - 1)
+          else if (m == e->ex_1 - 1)
             cell_index += 2;
           else
             cell_index += 1;
+
+          /* if this is not on the border of the panel, skip it */
+          if (cell_index == 100)
+            continue;
+
+          cell_offset = (cell_index & DRAWING_GUI_CELLS_MASK) * DRAWING_PIXELS_PER_CELL;
+
+          /* draw cell */
+          for (i = 0; i < 8; i++)
+          {
+            for (j = 0; j < 8; j++)
+            {
+              screen_x = e->x + 8 * m + i;
+              screen_y = e->y + 8 * n + j;
+
+              if ((screen_x < 0) || (screen_x >= DRAWING_FRAME_WIDTH))
+                continue;
+
+              if ((screen_y < 0) || (screen_y >= DRAWING_FRAME_HEIGHT))
+                continue;
+
+              color = G_drawing_gui_cells[cell_offset + 8 * j + i];
+
+              if (color == 0)
+                continue;
+
+              G_drawing_frame_pixels[screen_y * DRAWING_FRAME_WIDTH + screen_x] = 
+                G_drawing_gui_pals[pal_offset + (color & DRAWING_GUI_COLORS_MASK)];
+            }
+          }
         }
-        else if (dc->type == DRAW_CMD_TYPE_SPRITE)
-          cell_index = dc->cell + n * dc->w + m;
+      }
+    }
+    /* fixed text strings */
+    else if (e->type == LAYOUT_GUI_ELEMENT_TYPE_FIXED_TEXT)
+    {
+      pal_offset = (S_drawing_theme_text_pal[G_drawing_gui_theme] & DRAWING_GUI_PALS_MASK) * DRAWING_GUI_NUM_COLORS;
+
+      string_size = G_layout_gui_strings[e->ex_1];
+
+      for (m = 0; m < string_size; m++)
+      {
+        /* determine cell offset */
+        string_ch = G_layout_gui_strings[e->ex_1 + 1 + m];
+
+        if (string_ch < 32)
+          cell_index = 0;
         else
-          cell_index = dc->cell;
+          cell_index = string_ch - 32;
 
         cell_offset = (cell_index & DRAWING_GUI_CELLS_MASK) * DRAWING_PIXELS_PER_CELL;
 
-        /* draw cell */
+        /* draw the cell */
         for (i = 0; i < 8; i++)
         {
           for (j = 0; j < 8; j++)
           {
-            screen_x = dc->x + 8 * m + i;
-            screen_y = dc->y + 8 * n + j;
+            screen_x = e->x + 8 * m + i;
+            screen_y = e->y + j;
 
             if ((screen_x < 0) || (screen_x >= DRAWING_FRAME_WIDTH))
               continue;
@@ -287,7 +239,7 @@ short int drawing_compose_frame()
     G_drawing_frame_pixels[m] = bg_color;
 
   /* draw instruments screen */
-  drawing_draw_screen(LAYOUT_GUI_SCREEN_INSTRUMENT);
+  drawing_draw_screen(LAYOUT_GUI_SCREEN_INSTRUMENT_EDIT);
 
   return 0;
 }
